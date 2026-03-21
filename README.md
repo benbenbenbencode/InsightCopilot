@@ -1,4 +1,16 @@
-# 🧠 AI Data Analyst (Local)
+# InsightCopilot 🚀  
+AI-powered retail analytics system that transforms raw data into business decisions.
+
+## 🔥 What it does
+InsightCopilot simulates how companies analyze retail data by:
+- Detecting anomalies 📉
+- Generating insights 🧠
+- Recommending actions 🎯
+
+Instead of just dashboards, it provides **decision-ready intelligence**.
+
+
+# 🧠 InsightCopilot (Local)
 
 An end-to-end AI-powered data analyst that transforms natural language into SQL, executes queries, and automatically generates insights, root causes, and actionable business recommendations.
 
