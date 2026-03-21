@@ -1,0 +1,87 @@
+[0m21:04:27.676723 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'start', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x00000256697A4610>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x00000256697A4A50>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x00000256697A4B50>]}
+
+
+============================== 21:04:27.679230 | 0b5bbe02-a14c-436b-9c08-f4b1350ed28a ==============================
+[0m21:04:27.679230 [info ] [MainThread]: Running with dbt=1.7.9
+[0m21:04:27.680229 [debug] [MainThread]: running dbt with arguments {'static_parser': 'True', 'no_print': 'None', 'version_check': 'True', 'target_path': 'None', 'warn_error_options': 'WarnErrorOptions(include=[], exclude=[])', 'printer_width': '80', 'write_json': 'True', 'introspect': 'True', 'log_cache_events': 'False', 'cache_selected_only': 'False', 'fail_fast': 'False', 'debug': 'False', 'log_format': 'default', 'partial_parse': 'True', 'send_anonymous_usage_stats': 'True', 'quiet': 'False', 'warn_error': 'None', 'profiles_dir': 'C:\\Users\\BEN\\.dbt', 'use_colors': 'True', 'indirect_selection': 'eager', 'invocation_command': 'dbt init retail_dbt', 'use_experimental_parser': 'False', 'log_path': 'logs'}
+[0m21:04:27.680229 [warn ] [MainThread]: [ConfigFolderDirectory]: Unable to parse dict {'dir': WindowsPath('C:/Users/BEN/.dbt')}
+[0m21:04:27.680229 [info ] [MainThread]: Creating dbt configuration folder at 
+[0m21:04:27.681228 [debug] [MainThread]: Starter project path: C:\Playground\Python\ai-retail\venv311\Lib\site-packages\dbt\include\starter_project
+[0m21:04:27.718794 [info ] [MainThread]: 
+Your new dbt project "retail_dbt" was created!
+
+For more information on how to configure the profiles.yml file,
+please consult the dbt documentation here:
+
+  https://docs.getdbt.com/docs/configure-your-profile
+
+One more thing:
+
+Need help? Don't hesitate to reach out to us via GitHub issues or on Slack:
+
+  https://community.getdbt.com/
+
+Happy modeling!
+
+[0m21:04:27.719798 [info ] [MainThread]: Setting up your profile.
+[0m21:05:41.992918 [info ] [MainThread]: Profile retail_dbt written to C:\Users\BEN\.dbt\profiles.yml using target's profile_template.yml and your supplied values. Run 'dbt debug' to validate the connection.
+[0m21:05:41.993919 [debug] [MainThread]: Command `dbt init` succeeded at 21:05:41.993919 after 74.33 seconds
+[0m21:05:41.993919 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'end', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x00000256697B7590>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x00000256697B7ED0>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x00000256697B7F10>]}
+[0m21:05:41.993919 [debug] [MainThread]: Flushing usage events
+[0m21:05:53.975994 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'start', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x000001FFA86F4950>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x000001FFA8153C10>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x000001FFA7B1AF50>]}
+
+
+============================== 21:05:53.978038 | 425c8c70-c2d5-4afd-9c3f-489b9b78e91e ==============================
+[0m21:05:53.978038 [info ] [MainThread]: Running with dbt=1.7.9
+[0m21:05:53.979036 [debug] [MainThread]: running dbt with arguments {'static_parser': 'True', 'no_print': 'None', 'version_check': 'True', 'target_path': 'None', 'warn_error_options': 'WarnErrorOptions(include=[], exclude=[])', 'printer_width': '80', 'write_json': 'True', 'introspect': 'True', 'log_cache_events': 'False', 'cache_selected_only': 'False', 'fail_fast': 'False', 'debug': 'False', 'log_format': 'default', 'partial_parse': 'True', 'send_anonymous_usage_stats': 'True', 'quiet': 'False', 'warn_error': 'None', 'profiles_dir': 'C:\\Users\\BEN\\.dbt', 'invocation_command': 'dbt debug', 'indirect_selection': 'eager', 'use_colors': 'True', 'use_experimental_parser': 'False', 'log_path': 'logs'}
+[0m21:05:53.979036 [info ] [MainThread]: dbt version: 1.7.9
+[0m21:05:53.979036 [info ] [MainThread]: python version: 3.11.0
+[0m21:05:53.980104 [info ] [MainThread]: python path: C:\Playground\Python\ai-retail\venv311\Scripts\python.exe
+[0m21:05:53.980104 [info ] [MainThread]: os info: Windows-10-10.0.26100-SP0
+[0m21:05:54.027701 [info ] [MainThread]: Using profiles dir at C:\Users\BEN\.dbt
+[0m21:05:54.027701 [info ] [MainThread]: Using profiles.yml file at C:\Users\BEN\.dbt\profiles.yml
+[0m21:05:54.029205 [info ] [MainThread]: Using dbt_project.yml file at C:\Playground\Python\ai-retail\dbt_project.yml
+[0m21:05:54.030210 [info ] [MainThread]: adapter type: postgres
+[0m21:05:54.030210 [info ] [MainThread]: adapter version: 1.7.9
+[0m21:05:54.030210 [info ] [MainThread]: Configuration:
+[0m21:05:54.030210 [info ] [MainThread]:   profiles.yml file [[32mOK found and valid[0m]
+[0m21:05:54.031213 [info ] [MainThread]:   dbt_project.yml file [[31mERROR not found[0m]
+[0m21:05:54.031213 [info ] [MainThread]: Required dependencies:
+[0m21:05:54.031213 [debug] [MainThread]: Executing "git --help"
+[0m21:05:54.055454 [debug] [MainThread]: STDOUT: "b"usage: git [-v | --version] [-h | --help] [-C <path>] [-c <name>=<value>]\n           [--exec-path[=<path>]] [--html-path] [--man-path] [--info-path]\n           [-p | --paginate | -P | --no-pager] [--no-replace-objects] [--no-lazy-fetch]\n           [--no-optional-locks] [--no-advice] [--bare] [--git-dir=<path>]\n           [--work-tree=<path>] [--namespace=<name>] [--config-env=<name>=<envvar>]\n           <command> [<args>]\n\nThese are common Git commands used in various situations:\n\nstart a working area (see also: git help tutorial)\n   clone      Clone a repository into a new directory\n   init       Create an empty Git repository or reinitialize an existing one\n\nwork on the current change (see also: git help everyday)\n   add        Add file contents to the index\n   mv         Move or rename a file, a directory, or a symlink\n   restore    Restore working tree files\n   rm         Remove files from the working tree and from the index\n\nexamine the history and state (see also: git help revisions)\n   bisect     Use binary search to find the commit that introduced a bug\n   diff       Show changes between commits, commit and working tree, etc\n   grep       Print lines matching a pattern\n   log        Show commit logs\n   show       Show various types of objects\n   status     Show the working tree status\n\ngrow, mark and tweak your common history\n   backfill   Download missing objects in a partial clone\n   branch     List, create, or delete branches\n   commit     Record changes to the repository\n   merge      Join two or more development histories together\n   rebase     Reapply commits on top of another base tip\n   reset      Set `HEAD` or the index to a known state\n   switch     Switch branches\n   tag        Create, list, delete or verify tags\n\ncollaborate (see also: git help workflows)\n   fetch      Download objects and refs from another repository\n   pull       Fetch from and integrate with another repository or a local branch\n   push       Update remote refs along with associated objects\n\n'git help -a' and 'git help -g' list available subcommands and some\nconcept guides. See 'git help <command>' or 'git help <concept>'\nto read about a specific subcommand or concept.\nSee 'git help git' for an overview of the system.\n""
+[0m21:05:54.055454 [debug] [MainThread]: STDERR: "b''"
+[0m21:05:54.055454 [info ] [MainThread]:  - git [[32mOK found[0m]
+
+[0m21:05:54.056455 [info ] [MainThread]: Connection:
+[0m21:05:54.056455 [info ] [MainThread]:   host: localhost
+[0m21:05:54.057455 [info ] [MainThread]:   port: 5432
+[0m21:05:54.057455 [info ] [MainThread]:   user: postgres
+[0m21:05:54.057455 [info ] [MainThread]:   database: retail
+[0m21:05:54.057455 [info ] [MainThread]:   schema: public
+[0m21:05:54.057455 [info ] [MainThread]:   connect_timeout: 10
+[0m21:05:54.058959 [info ] [MainThread]:   role: None
+[0m21:05:54.058959 [info ] [MainThread]:   search_path: None
+[0m21:05:54.058959 [info ] [MainThread]:   keepalives_idle: 0
+[0m21:05:54.059963 [info ] [MainThread]:   sslmode: None
+[0m21:05:54.059963 [info ] [MainThread]:   sslcert: None
+[0m21:05:54.059963 [info ] [MainThread]:   sslkey: None
+[0m21:05:54.060964 [info ] [MainThread]:   sslrootcert: None
+[0m21:05:54.060964 [info ] [MainThread]:   application_name: dbt
+[0m21:05:54.061964 [info ] [MainThread]:   retries: 1
+[0m21:05:54.061964 [info ] [MainThread]: Registered adapter: postgres=1.7.9
+[0m21:05:54.061964 [debug] [MainThread]: Acquiring new postgres connection 'debug'
+[0m21:05:54.061964 [debug] [MainThread]: Using postgres connection "debug"
+[0m21:05:54.062964 [debug] [MainThread]: On debug: select 1 as id
+[0m21:05:54.062964 [debug] [MainThread]: Opening a new connection, currently in state init
+[0m21:05:54.087122 [debug] [MainThread]: SQL status: SELECT 1 in 0.0 seconds
+[0m21:05:54.088124 [debug] [MainThread]: On debug: Close
+[0m21:05:54.088124 [info ] [MainThread]:   Connection test: [[32mOK connection ok[0m]
+
+[0m21:05:54.089122 [info ] [MainThread]: [31m1 check failed:[0m
+[0m21:05:54.089122 [info ] [MainThread]: Project loading failed for the following reason:
+ project path <C:\Playground\Python\ai-retail\dbt_project.yml> not found
+
+[0m21:05:54.090347 [debug] [MainThread]: Command `dbt debug` failed at 21:05:54.090347 after 0.16 seconds
+[0m21:05:54.090347 [debug] [MainThread]: Connection 'debug' was properly closed.
+[0m21:05:54.091345 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'end', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x000001FFA984CA50>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x000001FFA7EFA750>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x000001FFA87CA790>]}
+[0m21:05:54.091345 [debug] [MainThread]: Flushing usage events
