@@ -3,7 +3,7 @@ from db.postgres import safe_run_query
 from core.sql_validator import validate_sql
 from llm.explainer import explain
 from core.join_engine import get_join_condition
-from llm.insight import generate_insight
+from core.insight import generate_insight
 
 
 # 🔥 Extract tables from SQL

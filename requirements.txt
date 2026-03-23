@@ -4,3 +4,7 @@ altair
 psycopg2-binary
 sqlalchemy
 requests
+fastapi
+uvicorn
+pandas
+requests
