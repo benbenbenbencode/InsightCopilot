@@ -1,65 +1,55 @@
 from llm.deepseek_sql import generate_sql, fallback_sql
 from db.postgres import safe_run_query
 from core.sql_validator import validate_sql
-from llm.explainer import explain
 from core.join_engine import get_join_condition
 from core.insight import generate_insight
 
 
-# 🔥 Extract tables from SQL
 def extract_tables(sql: str):
     tables = []
-
     tokens = sql.replace(",", " ").split()
     for i, token in enumerate(tokens):
         if token.upper() in ["FROM", "JOIN"]:
             if i + 1 < len(tokens):
                 tables.append(tokens[i + 1])
+    # dict.fromkeys dedupes while preserving first-seen order -- a plain
+    # set() here was the bug: it scrambles order, and everything below
+    # assumes tables[0] is the base/hub table (fct_transactions). When set()
+    # happened to put dim_products or dim_users first instead, the query
+    # got built FROM the wrong table and dim_users had no join path to it,
+    # producing "missing FROM-clause entry for table dim_users".
+    return list(dict.fromkeys(tables))
 
-    return list(set(tables))
 
-
-# 🔥 FIXED Detect aggregation (IMPORTANT)
 def detect_aggregation(question: str):
     q = question.lower()
 
     metrics = []
     group_by = []
 
-    # 🔥 detect aggregation intent FIRST
     agg_keywords = ["total", "sum", "average", "avg", "count", "compare"]
-
     has_agg = any(k in q for k in agg_keywords)
 
-    # 🔥 metrics only if aggregation exists
     if has_agg:
         if "revenue" in q or "sales" in q:
             metrics.append("SUM(fct_transactions.revenue) as total_revenue")
-
         if "promo" in q:
             metrics.append("SUM(fct_promotions.promo_cost) as total_promo_cost")
 
-    # 🔥 group_by ONLY if aggregation exists
     if has_agg:
         if "by city" in q or "per city" in q:
             group_by.append("dim_users.city")
-
         if "by product" in q:
             group_by.append("dim_products.product_name")
 
     return metrics, group_by
 
 
-# 🔥 Build SELECT clause
 def build_select_clause(tables, metrics, group_by):
-
-    # 🔥 If aggregation → ONLY use group_by + metrics
     if metrics and group_by:
         return ",\n".join(group_by + metrics)
 
-    # 🔥 fallback (raw mode)
     select_parts = []
-
     for t in tables:
         if t == "fct_transactions":
             select_parts += [
@@ -72,51 +62,32 @@ def build_select_clause(tables, metrics, group_by):
                 f"{t}.price",
                 f"{t}.revenue",
             ]
-
         elif t == "dim_users":
-            select_parts += [
-                f"{t}.city as user_city",
-            ]
-
+            select_parts += [f"{t}.city as user_city"]
         elif t == "dim_products":
-            select_parts += [
-                f"{t}.product_name",
-                f"{t}.category",
-            ]
-
+            select_parts += [f"{t}.product_name", f"{t}.category"]
         elif t == "fct_promotions":
-            select_parts += [
-                f"{t}.promo_cost",
-            ]
+            select_parts += [f"{t}.promo_cost"]
 
     return ",\n".join(select_parts)
 
 
 def run_pipeline(question: str):
     sql = generate_sql(question)
+    print("RAW SQL:", sql)
 
-    print("🧠 RAW SQL:", sql)
-
-    # 🔥 VALIDATE
     if not validate_sql(sql):
-        print("⚠️ Invalid SQL → fallback")
+        print("Invalid SQL -> fallback")
         sql = fallback_sql()
 
-    # 🔥 EXTRACT TABLES
     tables = extract_tables(sql)
-    print("📦 TABLES BEFORE:", tables)
+    print("TABLES BEFORE:", tables)
 
-    # 🔥 FIX TABLE NAMES
-    table_mapping = {
-        "daily_transactions": "fct_transactions",
-        "transactions": "fct_transactions",
-        "users": "dim_users",
-        "products": "dim_products",
-    }
+    # NOTE: no more table_mapping dict here. db/postgres.ALLOWED_TABLES,
+    # core/join_engine.JOIN_MAP, and the dbt mart models in retail_dbt/
+    # all use the same table names now (fct_transactions, dim_users,
+    # dim_products, fct_promotions), so nothing needs translating.
 
-    tables = [table_mapping.get(t, t) for t in tables]
-
-    # 🔥 SEMANTIC RULES
     q = question.lower()
 
     if "city" in q or "user" in q:
@@ -131,16 +102,12 @@ def run_pipeline(question: str):
         if "fct_promotions" not in tables:
             tables.append("fct_promotions")
 
-    # Ensure base table
     if "fct_transactions" not in tables:
         tables.insert(0, "fct_transactions")
 
-    print("📦 TABLES AFTER:", tables)
+    print("TABLES AFTER:", tables)
 
-    # 🔥 Detect aggregation
     metrics, group_by = detect_aggregation(question)
-
-    # 🔥 Build SELECT
     select_clause = build_select_clause(tables, metrics, group_by)
     base_table = tables[0]
 
@@ -150,15 +117,13 @@ def run_pipeline(question: str):
     FROM {base_table}
     """
 
-    # 🔥 APPLY JOINS (MULTI-HOP)
     joined_tables = {base_table}
 
     for t in tables[1:]:
-
         join_condition = get_join_condition(base_table, t)
 
         if join_condition:
-            print(f"🔗 DIRECT JOIN {base_table} → {t}")
+            print(f"DIRECT JOIN {base_table} -> {t}")
             query += f"""
             LEFT JOIN {t}
             ON {join_condition}
@@ -167,12 +132,10 @@ def run_pipeline(question: str):
             continue
 
         if t == "fct_promotions":
-
             if "dim_products" not in joined_tables:
                 bridge_join = get_join_condition(base_table, "dim_products")
-
                 if bridge_join:
-                    print(f"🔗 BRIDGE JOIN {base_table} → dim_products")
+                    print(f"BRIDGE JOIN {base_table} -> dim_products")
                     query += f"""
                     LEFT JOIN dim_products
                     ON {bridge_join}
@@ -180,36 +143,31 @@ def run_pipeline(question: str):
                     joined_tables.add("dim_products")
 
             promo_join = get_join_condition("dim_products", "fct_promotions")
-
             if promo_join:
-                print("🔗 JOIN dim_products → fct_promotions")
+                print("JOIN dim_products -> fct_promotions")
                 query += f"""
                 LEFT JOIN fct_promotions
                 ON {promo_join}
                 """
                 joined_tables.add("fct_promotions")
 
-    # 🔥 GROUP BY only when valid
     if metrics and group_by:
         query += f"""
         GROUP BY {", ".join(group_by)}
         """
 
-    # 🔥 LIMIT only for raw
     if not metrics:
         query += "\nLIMIT 1000"
 
     sql = query
+    print("FINAL SQL:", sql)
 
-    print("🚀 FINAL SQL:", sql)
-
-    # 🔥 EXECUTE
     result = safe_run_query(sql)
 
     if isinstance(result, tuple) or result is None:
         return {
             "sql": sql,
-            "error": result[1] if isinstance(result, tuple) else "Unknown DB error"
+            "error": result[1] if isinstance(result, tuple) else "Unknown DB error",
         }
 
     try:
@@ -217,8 +175,4 @@ def run_pipeline(question: str):
     except Exception as e:
         insight = f"Insight failed: {str(e)}"
 
-    return {
-        "sql": sql,
-        "data": result,
-        "insight": insight
-    }
+    return {"sql": sql, "data": result, "insight": insight}

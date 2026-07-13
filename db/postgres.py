@@ -1,22 +1,40 @@
+import os
+import time
 import psycopg2
 import pandas as pd
-import streamlit as st
+from dotenv import load_dotenv
 
+load_dotenv()
 
-
+# ---------------------------------------------------------------------------
+# Config comes from environment now, never hardcoded.
+# Copy .env.example to .env and fill in your real values.
+# ---------------------------------------------------------------------------
 DB_CONFIG = {
-    "host": "localhost",
-    "dbname": "retail",
-    "user": "postgres",
-    "password": "admin",  # 🔴 CHANGE
-    "port": 5432
+    "host": os.environ.get("DB_HOST", "localhost"),
+    "dbname": os.environ.get("DB_NAME", "retail"),
+    "user": os.environ.get("DB_USER", "postgres"),
+    "password": os.environ.get("DB_PASSWORD"),
+    "port": int(os.environ.get("DB_PORT", 5432)),
 }
 
+if not DB_CONFIG["password"]:
+    raise RuntimeError(
+        "DB_PASSWORD is not set. Copy .env.example to .env and fill it in "
+        "before running the app."
+    )
 
+# ---------------------------------------------------------------------------
+# Single source of truth for the schema. This now matches the dbt mart layer
+# in retail_dbt/models/ (fct_transactions, dim_users, dim_products,
+# fct_promotions) so the LLM, the join engine, and the actual database all
+# agree on table names. No more translation dictionary in pipeline.py.
+# ---------------------------------------------------------------------------
 ALLOWED_TABLES = [
-    "daily_transactions",
-    "user_summary",
-    "product_metrics"
+    "fct_transactions",
+    "dim_users",
+    "dim_products",
+    "fct_promotions",
 ]
 
 
@@ -31,10 +49,40 @@ def run_query(sql: str):
     finally:
         conn.close()
 
-@st.cache_data(ttl=60)
+
+# ---------------------------------------------------------------------------
+# Framework-agnostic TTL cache. Replaces the old @st.cache_data dependency,
+# which coupled the data layer to Streamlit and broke when this module was
+# imported from the FastAPI app.
+# ---------------------------------------------------------------------------
+_query_cache = {}
+_CACHE_TTL_SECONDS = 60
+
+
+def _cache_get(key):
+    entry = _query_cache.get(key)
+    if entry is None:
+        return None
+    value, expires_at = entry
+    if time.time() > expires_at:
+        del _query_cache[key]
+        return None
+    return value
+
+
+def _cache_set(key, value):
+    _query_cache[key] = (value, time.time() + _CACHE_TTL_SECONDS)
+
+
 def safe_run_query(sql: str):
+    cached = _cache_get(sql)
+    if cached is not None:
+        return cached
+
     try:
-        return run_query(sql)
+        result = run_query(sql)
+        _cache_set(sql, result)
+        return result
     except Exception as e:
         print("\n=== DB ERROR ===")
         print(sql)
@@ -43,8 +91,12 @@ def safe_run_query(sql: str):
         return None, str(e)
 
 
-# 🔥 FILTERED SCHEMA
 def get_schema():
+    """Returns {table_name: [columns]} for every table in ALLOWED_TABLES.
+
+    This is what gets serialized into the prompt for NL->SQL generation, so
+    it MUST stay in sync with ALLOWED_TABLES and with join_engine.JOIN_MAP.
+    """
     conn = get_connection()
 
     query = """
@@ -64,9 +116,6 @@ def get_schema():
         if table not in ALLOWED_TABLES:
             continue
 
-        if table not in schema:
-            schema[table] = []
-
-        schema[table].append(row["column_name"])
+        schema.setdefault(table, []).append(row["column_name"])
 
     return schema

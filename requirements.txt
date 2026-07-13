@@ -6,5 +6,7 @@ sqlalchemy
 requests
 fastapi
 uvicorn
-pandas
-requests
+python-dotenv
+scikit-learn
+statsmodels
+pytest

@@ -18,3 +18,13 @@ def get_join_condition(left_table, right_table):
         return f"{left_table}.{left_key} = {right_table}.{right_key}"
 
     return None
+
+
+def is_allowed_join(left_table: str, right_table: str) -> bool:
+    """Used by the validator to check whether a JOIN the LLM wrote is one
+    we actually know how to verify, instead of banning every JOIN outright.
+    """
+    return (
+        (left_table, right_table) in JOIN_MAP
+        or (right_table, left_table) in JOIN_MAP
+    )
