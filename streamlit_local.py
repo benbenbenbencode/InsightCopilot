@@ -1,64 +1,12 @@
-import streamlit as st
-from core.pipeline import run_pipeline
-from app.chart import render_chart
-from recommender import generate_recommendations
+"""Compatibility entry point.
 
-st.set_page_config(page_title="AI Data Analyst", layout="wide")
+Earlier versions shipped a second, API-free UI here. Both entry points now run
+the same dashboard, which calls the pipeline in-process and needs no server:
 
-st.title("📊 AI Data Analyst (Local)")
+    streamlit run streamlit_local.py
+    streamlit run streamlit_app.py
+"""
 
-question = st.text_input("Ask your data")
+from app.dashboard import main
 
-if st.button("Run"):
-    result = run_pipeline(question)
-
-    st.subheader("🧠 Generated SQL")
-    st.code(result.get("sql", ""), language="sql")
-
-    # ❌ ERROR
-    if "error" in result:
-        st.error("Query failed")
-        st.text(result.get("error", "Unknown error"))
-
-    # ✅ SUCCESS
-    elif "data" in result:
-        df = result["data"]
-
-        st.subheader("📊 Data")
-        st.dataframe(df)
-
-        # 🔥 Chart
-        render_chart(df)
-
-        # 💡 Insights
-        if "explanation" in result:
-            st.subheader("💡 Insights")
-            st.write(result["explanation"])
-
-        # =========================
-        # 🚀 NEW: RECOMMENDATION
-        # =========================
-        try:
-            if all(col in df.columns for col in ["product", "sales", "date"]):
-
-                st.subheader("🚀 AI Recommendations")
-
-                top_products = generate_recommendations(df)
-
-                st.dataframe(top_products)
-
-                # 🔥 Business explanation layer
-                for _, row in top_products.iterrows():
-                    st.write(
-                        f"📌 **{row['product']}** is recommended due to strong performance and positive growth trend."
-                    )
-
-            else:
-                st.info("Recommendation requires columns: product, sales, date")
-
-        except Exception as e:
-            st.warning("Recommendation engine failed")
-            st.text(str(e))
-
-    else:
-        st.warning("No result returned")
+main()

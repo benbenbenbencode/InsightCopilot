@@ -4,3 +4,15 @@ __pycache__/
 *.pyc
 .env
 .DS_Store
+
+# generated artifacts
+reports/
+training/data/
+training/out/
+.pytest_cache/
+
+# dbt
+retail_dbt/target/
+retail_dbt/logs/
+retail_dbt/dbt_packages/
+logs/

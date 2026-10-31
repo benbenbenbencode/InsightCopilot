@@ -1,138 +1,172 @@
 # InsightCopilot
 
-An applied-insight analytics assistant for a retail dataset: ask a business question in plain English, get back the SQL that answers it, the data, an AI-generated narrative insight, flagged anomalies, a root-cause breakdown, and ranked recommendations.
+Ask a business question in plain English. Get a validated SQL query, an
+analysis with real numbers, a written narrative, an interactive chart, and a
+shareable **PDF / PowerPoint / Excel** report — running entirely on your own
+machine with a local model.
 
-Built with FastAPI, Streamlit, PostgreSQL, dbt, and a local LLM (DeepSeek via Ollama).
-
-![Demo](assets/demo1.PNG)
-![Demo](assets/demo2.PNG)
+![status](https://img.shields.io/badge/LLM-local%20(Ollama)-6c5ce7)
 
 ---
 
-## What this actually is (read this before the feature list)
+## What changed in v2
 
-This is **not** a generic "connect to any database" NL2SQL tool -- that's an open problem the industry hasn't solved either (state-of-the-art models still collapse from ~85% accuracy on clean academic benchmarks to 10-20% on real enterprise schemas). This project is deliberately scoped to one retail schema, and it uses a **hybrid approach**: an LLM proposes SQL and identifies relevant tables, but the actual query that runs is assembled through a constrained, whitelist-based builder -- never executed directly from raw LLM output. That's a safety-by-construction choice, not a limitation to apologize for.
+The v1 pipeline looked like NL→SQL but wasn't: the model's SQL was thrown away
+after table extraction, and the executed query was rebuilt from keyword
+matching (`"by city"`, `"by product"`). Anything phrased differently silently
+fell back to a fixed query. The "root cause" and "recommendations" panels were
+hardcoded string templates in the chart module.
+
+| v1 | v2 |
+|---|---|
+| LLM SQL discarded, query rebuilt from keywords | model's SQL is executed, after whitelist + `EXPLAIN` validation and a bounded repair loop |
+| `subprocess.run(["ollama", "run", ...])` per request | one HTTP client, retries, timing, JSON-schema output |
+| `deepseek-coder` (1B) | `qwen3.6` (36B MoE) with a measured fallback |
+| recommendations were f-strings | findings computed from data; narrative generated, then number-checked |
+| no exports | PDF, PPTX, XLSX, plus an interactive dashboard |
+| schema scattered across 4 modules | one `semantic/semantic_layer.yml` |
 
 ## Architecture
 
 ```
-User question (natural language)
-        |
-        v
-[ LLM: table/intent extraction ]  <-- llm/deepseek_sql.py
-        |
-        v
-[ Whitelist SQL validator ]        <-- core/sql_validator.py
-        |  (unknown table / unsafe SQL -> fallback query)
-        v
-[ Query builder + join engine ]    <-- core/pipeline.py, core/join_engine.py
-        |
-        v
-[ PostgreSQL ]  <-- dbt-modeled star schema (retail_dbt/)
-        |
-        v
-   +----+----------------+------------------+
-   |                     |                  |
-[Anomaly detection] [Root cause]     [Recommender]
-core/anomaly.py     core/root_cause.py core/recommender.py
-   |                     |                  |
-   +----------+----------+------------------+
-              v
-     [LLM insight generation + grounding check]
-              core/insight.py
-              |
-              v
-      FastAPI (api/main.py) -> Streamlit UI (streamlit_app.py)
+question
+   |
+   v
+[semantic layer]  semantic/semantic_layer.yml   (tables, metrics, joins, synonyms, few-shots)
+   |
+   v
+[prompt]  tables + metrics + coverage + examples
+   |
+   v
+[local model]  llm/client.py  ->  Ollama /api/chat
+   |
+   v
+[validate]  core/nl2sql.py    static whitelist  ->  EXPLAIN against PostgreSQL  ->  repair & retry
+   |
+   v
+[execute]   core/executor.py  read-only txn, 30s timeout, row cap
+   |
+   v
+[analyse]   core/analysis.py  KPIs, trend, concentration, MAD anomalies
+   |
+   v
+[narrate]   core/narrative.py structured JSON + numeric grounding check
+   |
+   +--> dashboard (Streamlit)  app/dashboard.py
+   +--> API (FastAPI)          api/main.py
+   +--> reports                report/  ->  PDF | PPTX | XLSX
 ```
 
-### Schema
+## The semantic layer
 
-The app queries a dbt-modeled star schema (see `retail_dbt/models/`):
+`semantic/semantic_layer.yml` is the contract. Adding a metric is a YAML edit,
+not a code change:
 
-- `fct_transactions` -- transaction fact table (the hub; joins to everything else)
-- `dim_users` -- user dimension (city, etc.)
-- `dim_products` -- product dimension (name, category)
-- `fct_promotions` -- promotion cost, joined via `dim_products`
+```yaml
+metrics:
+  - id: revenue_per_user
+    label: Revenue per user
+    sql: SUM(fct_transactions.revenue) / NULLIF(COUNT(DISTINCT fct_transactions.user_id), 0)
+    format: currency
+    synonyms: [arpu, revenue per user, pendapatan per pelanggan]
+```
 
-`db/postgres.ALLOWED_TABLES` and `core/join_engine.JOIN_MAP` are the single source of truth for what the LLM is allowed to see and join -- they're kept deliberately in sync with this schema rather than with a separate app-only schema, which was a real bug caught and fixed during development (see Known Limitations).
+It drives three things at once: the prompt (so the model uses your business
+definitions verbatim), the validator (allowed tables), and the report renderer
+(metric labels and formats). Synonyms are bilingual — "omzet", "kota",
+"pelanggan" resolve the same as "revenue", "city", "customer".
 
-## Features
+## Model choice (measured, not guessed)
 
-- **Natural language -> SQL**, constrained by a whitelist validator (rejects unknown tables/columns and unrecognized join pairs; forbids DELETE/UPDATE/INSERT/DROP/etc.)
-- **Anomaly detection** using Median Absolute Deviation by default (more robust to extreme outliers than plain z-score, which is also available), with a severity rating per anomaly
-- **Root cause analysis** that compares an anomalous day against a rolling baseline per dimension (e.g. product, city), ranks contributors by delta vs. baseline, and flags whether a spike is spread across many transactions or concentrated in a few
-- **Recommendation engine** using a percentile-rank composite score (volume, consistency, frequency) instead of arbitrary fixed weights on raw values
-- **LLM-generated narrative insight** with a lightweight grounding check: numbers the model mentions are cross-checked against the actual data (raw values + sums/means/counts) and flagged if they don't match, instead of trusting the narrative blindly
-- **Automatic chart generation** for query results
+Benchmarked on this machine — RTX 5080 16 GB, 200k-row retail dataset, two
+NL→SQL probe questions:
 
-## Design decisions (the "why", for anyone reviewing this)
+| Model | Size | Warm throughput | Notes |
+|---|---|---|---|
+| **qwen3.6:latest** (36B MoE) | 22.3 GB | **60–65 tok/s** | both queries correct → **default** |
+| qwen2.5-coder:7b | 4.4 GB | 150–160 tok/s | fastest, but misread "revenue per user" as avg per row |
+| Qwen3.8-27B Q4 | 15.7 GB | 15 tok/s | correct, noticeably slower |
 
-- **Why hybrid rule+LLM SQL generation instead of pure text-to-SQL?** Pure LLM-generated SQL executed directly against a real database is a real safety and reliability risk -- enterprise text-to-SQL tools hit this same wall. The LLM here is used for intent/table extraction; the actual query is always assembled through vetted templates.
-- **Why MAD over z-score for anomaly detection?** Z-score uses mean/std, which a single extreme spike can distort, potentially masking other real anomalies. MAD uses the median and is far less sensitive to that.
-- **Why percentile-rank scoring in the recommender instead of fixed weights?** `total_sales`, `avg_sales`, and `frequency` are on different scales; a fixed weight on raw values just lets whichever metric has the biggest numbers dominate. Ranking to a 0-1 percentile first makes the weights mean what they say.
-- **Why a grounding check on LLM insights instead of trusting the output?** LLMs narrating over data can invent plausible-sounding numbers. The check isn't formal verification -- it's a cheap heuristic that catches the common case of a fabricated figure.
+The 36B is larger than VRAM, but it is an MoE — only a fraction of parameters
+are active per token, so CPU offload still yields 60+ tok/s. First call after
+idle takes ~40 s to load; `keep_alive=30m` avoids paying that repeatedly.
 
-## Known limitations
+Set `SQL_MODEL` / `FAST_MODEL` in `.env` to switch.
 
-Being upfront about these rather than hiding them:
+## Reports
 
-- The NL->SQL layer is keyword/pattern-based underneath the LLM extraction step (e.g. "by city", "by product") -- questions phrased very differently from these patterns fall back to a static query rather than being understood.
-- The grounding check on LLM insights is a heuristic (regex number extraction vs. dataframe values), not a formal correctness guarantee.
-- Anomaly detection and root-cause analysis assume a specific column shape (`date`, `sales`, a dimension column) after an explicit rename step in the API layer -- queries that don't produce those columns skip these steps rather than erroring.
-- This is scoped to one schema by design (see "What this actually is" above), not a general-purpose tool for arbitrary databases.
+Every answer can be exported; the same `ReportBundle` feeds all three formats,
+so what you see on screen is what lands in the file.
+
+- **PDF** — cover, executive summary, KPI cards, chart, findings, actions,
+  caveats, data table, full SQL in a provenance section
+- **PPTX** — six slides, 16:9, matching theme
+- **XLSX** — Summary, KPIs, Findings, Actions, Data sheets, styled and frozen
 
 ## Setup
 
-### 1. Database
-
-```bash
-cd retail_dbt
-dbt run
-dbt test
-cd ..
-```
-
-### 2. Environment
-
-```bash
-cp .env.example .env
-# edit .env with your real DB_PASSWORD etc.
-```
-
-### 3. Install dependencies
-
 ```bash
 pip install -r requirements.txt
+
+cp .env.example .env          # set DB_PASSWORD and model names
+ollama pull qwen3.6           # or point SQL_MODEL at any installed model
 ```
 
-### 4. Run tests
+```bash
+streamlit run streamlit_app.py        # dashboard
+python -m uvicorn api.main:app --reload   # API on :8000, docs at /docs
+```
+
+## API
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /health` | database, Ollama, semantic layer status |
+| `GET /semantic` | the semantic layer as JSON |
+| `POST /sql` | question → validated SQL, nothing executed |
+| `POST /ask` | question → SQL, rows, analysis, narrative |
+| `POST /report` | question → generated files (pdf/pptx/xlsx) |
+| `GET /download/{file}` | fetch a generated report |
+
+## Verification
 
 ```bash
+python -m scripts.smoke_nl2sql        # 5 questions through the real pipeline
+python -m scripts.smoke_report        # full report build, writes to reports/
+python -m scripts.test_dashboard      # Streamlit render + one interaction, headless
 python -m pytest tests/ -q
 ```
 
-### 5. Run the app
+Current state: 5/5 NL→SQL questions correct on first attempt (1–11 s each),
+reports generate in ~8 s, dashboard renders without exceptions, narrative
+grounding passes.
+
+## Fine-tuning
+
+`training/` builds a dataset from the semantic layer and trains a QLoRA adapter:
 
 ```bash
-# terminal 1
-python -m uvicorn api.main:app --reload
-
-# terminal 2
-streamlit run streamlit_app.py
+python -m training.build_dataset --count 200
+python -m training.train_qlora --model Qwen/Qwen2.5-Coder-7B-Instruct
+ollama create retail-sql -f training/Modelfile
 ```
 
-## Example questions
+See [training/README.md](training/README.md). Be realistic: a 36B cannot be
+trained on 16 GB. Train a 7B adapter for style/refusals and keep the 36B for
+hard questions. The semantic layer and few-shot examples usually buy more than
+a fine-tune.
 
-- "Show total sales by city"
-- "What is the total revenue by product?"
-- "What is the total promo cost by product?"
+## Limitations
 
-## Tech stack
-
-Python, FastAPI, Streamlit, PostgreSQL, dbt, Pandas, DeepSeek (via Ollama), pytest, scikit-learn, statsmodels.
-
-## Roadmap
-
-- [ ] Feedback loop: log question/SQL/insight + thumbs up/down, track insight accuracy over time
-- [ ] Expand NL->SQL pattern coverage beyond the current keyword set
-- [ ] Auto-generate `JOIN_MAP` from database foreign keys instead of a manual dict
+- **Scoped to one schema by design.** This is not a general text-to-SQL tool.
+- **30 days of data** (2026-02-18 → 2026-03-19). The prompt says so explicitly,
+  so relative questions anchor to the data, not `CURRENT_DATE`.
+- **Grounding check is a heuristic** — numbers are compared within 2% of
+  computed values. It catches fabricated figures, not misinterpreted ones.
+- **The narrative can still be wrong** about *why* something happened; it only
+  describes what the data shows.
+- **Fine-tuning is untested on this machine** (no CUDA training stack
+  installed). The scripts are standard PEFT/transformers; WSL2 recommended.
+- Legacy v1 modules (`core/pipeline.py`, `app/chart.py`, `llm/deepseek_sql.py`,
+  `core/insight.py`) are left in place but unused. They still contain the
+  keyword builder; nothing imports them.

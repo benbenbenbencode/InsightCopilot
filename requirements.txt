@@ -1,3 +1,4 @@
+# Core app
 streamlit
 pandas
 altair
@@ -7,6 +8,22 @@ requests
 fastapi
 uvicorn
 python-dotenv
+pyyaml
+
+# Analysis
 scikit-learn
 statsmodels
+
+# Reporting
+fpdf2
+python-pptx
+matplotlib
+openpyxl
+
+# Tests
 pytest
+
+# --- Optional: fine-tuning only -------------------------------------------
+# Not installed by default; these pull a full CUDA training stack (~3 GB).
+# Install in WSL2 or a separate venv:
+#   pip install torch transformers peft datasets accelerate bitsandbytes
