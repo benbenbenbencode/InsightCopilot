@@ -1,0 +1,244 @@
+# ---------------------------------------------------------------------------
+# Retail semantic layer
+#
+# This file is the single source of truth for what the assistant is allowed to
+# query, what the business metrics mean, and how tables join. The NL->SQL
+# prompt is generated from it, the validator checks against it, and the report
+# layer uses the metric metadata (labels + formats) for rendering.
+#
+# Edit this file -- not the Python -- to teach the assistant about new tables,
+# metrics, or vocabulary.
+# ---------------------------------------------------------------------------
+
+version: 1
+name: retail
+description: >
+  Retail order data: transactions, users, products and promotions for
+  a single retail business. Grain of the fact table is one row per order line.
+
+default_limit: 500
+
+# Tables exist in the database but must never be used by the assistant.
+# Keeping them listed (rather than silently absent) documents *why*.
+excluded_tables:
+  fact_transactions: "duplicate of fct_transactions; use fct_transactions"
+  dim_promotions: "older copy of fct_promotions with a differently named date column"
+  raw_orders: "staging table; use fct_transactions"
+  raw_users: "staging table; use dim_users"
+  raw_products: "staging table; use dim_products"
+  raw_promotions: "staging table; use fct_promotions"
+  daily_transactions: "pre-aggregated rollup; use fct_transactions for flexibility"
+
+entities:
+  - name: fct_transactions
+    label: Transactions
+    grain: one row per order line
+    primary_key: order_id
+    description: Revenue-generating order lines. The hub table.
+    columns:
+      order_id: { type: text, description: Order identifier (not unique per row if an order has multiple lines) }
+      user_id: { type: text, description: Buying user; joins to dim_users }
+      product_id: { type: text, description: Product bought; joins to dim_products }
+      order_date: { type: date, description: Date the order was placed }
+      city: { type: text, description: City the order was placed from }
+      quantity: { type: bigint, description: Units in this order line }
+      price: { type: bigint, description: Unit price }
+      revenue: { type: bigint, description: Line revenue (quantity * price) }
+
+  - name: dim_users
+    label: Users
+    primary_key: user_id
+    description: One row per registered user.
+    columns:
+      user_id: { type: text, description: User identifier }
+      city: { type: text, description: City the user registered in }
+      signup_date: { type: date, description: Registration date }
+
+  - name: dim_products
+    label: Products
+    primary_key: product_id
+    description: One row per product.
+    columns:
+      product_id: { type: text, description: Product identifier }
+      product_name: { type: text, description: Human-readable product name }
+      category: { type: text, description: Product category }
+
+  - name: fct_promotions
+    label: Promotions
+    primary_key: null
+    description: Promotion spend per product per date.
+    columns:
+      promo_date: { type: timestamp, description: Date the promotion spend was incurred }
+      product_id: { type: text, description: Product promoted; joins to dim_products }
+      promo_cost: { type: bigint, description: Money spent on the promotion }
+
+joins:
+  - left: fct_transactions
+    right: dim_products
+    condition: fct_transactions.product_id = dim_products.product_id
+    type: left
+    relationship: many_to_one
+  - left: fct_transactions
+    right: dim_users
+    condition: fct_transactions.user_id = dim_users.user_id
+    type: left
+    relationship: many_to_one
+  - left: fct_promotions
+    right: dim_products
+    condition: fct_promotions.product_id = dim_products.product_id
+    type: left
+    relationship: many_to_one
+
+dimensions:
+  - id: order_date
+    label: Order date
+    sql: fct_transactions.order_date
+    type: date
+    synonyms: [date, day, tanggal, hari]
+  - id: order_month
+    label: Order month
+    sql: date_trunc('month', fct_transactions.order_date)::date
+    type: date
+    synonyms: [month, bulan, monthly]
+  - id: order_week
+    label: Order week
+    sql: date_trunc('week', fct_transactions.order_date)::date
+    type: date
+    synonyms: [week, minggu, weekly]
+  - id: city
+    label: Order city
+    sql: fct_transactions.city
+    type: text
+    synonyms: [city, kota, area, region, daerah]
+  - id: user_city
+    label: User signup city
+    sql: dim_users.city
+    type: text
+    synonyms: [user city, signup city, kota user]
+  - id: product
+    label: Product
+    sql: dim_products.product_name
+    type: text
+    synonyms: [product, produk, item, barang, sku]
+  - id: category
+    label: Category
+    sql: dim_products.category
+    type: text
+    synonyms: [category, kategori, segment]
+  - id: promo_date
+    label: Promotion date
+    sql: fct_promotions.promo_date
+    type: date
+    synonyms: [promo date, tanggal promo]
+
+metrics:
+  - id: revenue
+    label: Revenue
+    sql: SUM(fct_transactions.revenue)
+    format: currency
+    description: Total money taken from order lines.
+    synonyms: [revenue, sales, omzet, pendapatan, turnover, penjualan]
+  - id: orders
+    label: Orders
+    sql: COUNT(DISTINCT fct_transactions.order_id)
+    format: integer
+    description: Number of distinct orders.
+    synonyms: [orders, order count, jumlah pesanan, transaksi]
+  - id: units
+    label: Units sold
+    sql: SUM(fct_transactions.quantity)
+    format: integer
+    description: Total quantity of items sold.
+    synonyms: [units, quantity, qty, jumlah item]
+  - id: active_users
+    label: Active users
+    sql: COUNT(DISTINCT fct_transactions.user_id)
+    format: integer
+    description: Distinct users who placed at least one order.
+    synonyms: [users, buyers, customers, pelanggan, pembeli]
+  - id: avg_order_value
+    label: Average order value
+    sql: SUM(fct_transactions.revenue) / NULLIF(COUNT(DISTINCT fct_transactions.order_id), 0)
+    format: currency
+    description: Revenue divided by number of orders.
+    synonyms: [aov, average order value, rata-rata pesanan]
+  - id: revenue_per_user
+    label: Revenue per user
+    sql: SUM(fct_transactions.revenue) / NULLIF(COUNT(DISTINCT fct_transactions.user_id), 0)
+    format: currency
+    description: Revenue divided by distinct buying users.
+    synonyms: [arpu, revenue per user, pendapatan per pelanggan]
+  - id: promo_spend
+    label: Promotion spend
+    sql: SUM(fct_promotions.promo_cost)
+    format: currency
+    description: Total money spent on promotions.
+    synonyms: [promo cost, promo spend, biaya promo, budget]
+  - id: roas
+    label: ROAS
+    sql: SUM(fct_transactions.revenue) / NULLIF(SUM(fct_promotions.promo_cost), 0)
+    format: ratio
+    description: Revenue returned per unit of promotion spend.
+    synonyms: [roas, roi, return on ad spend]
+
+# Few-shot examples. These teach the model the house style far more reliably
+# than instructions alone, and they double as regression tests.
+examples:
+  - question: What is total revenue by product category?
+    sql: |
+      SELECT dim_products.category AS category,
+             SUM(fct_transactions.revenue) AS revenue
+      FROM fct_transactions
+      LEFT JOIN dim_products ON fct_transactions.product_id = dim_products.product_id
+      GROUP BY dim_products.category
+      ORDER BY revenue DESC
+      LIMIT 500
+
+  - question: Which cities generate the most revenue?
+    sql: |
+      SELECT city, SUM(fct_transactions.revenue) AS revenue
+      FROM fct_transactions
+      GROUP BY city
+      ORDER BY revenue DESC
+      LIMIT 500
+
+  - question: How did revenue trend over the last 30 days?
+    sql: |
+      SELECT order_date::date AS order_date,
+             SUM(revenue) AS revenue
+      FROM fct_transactions
+      WHERE order_date >= (SELECT MAX(order_date) FROM fct_transactions) - INTERVAL '30 days'
+      GROUP BY 1
+      ORDER BY 1
+      LIMIT 500
+
+  - question: Show weekly revenue over the last 12 weeks.
+    sql: |
+      SELECT date_trunc('week', order_date)::date AS week,
+             SUM(revenue) AS revenue
+      FROM fct_transactions
+      WHERE order_date >= (SELECT MAX(order_date) FROM fct_transactions) - INTERVAL '12 weeks'
+      GROUP BY 1
+      ORDER BY 1
+      LIMIT 500
+
+  - question: What is the average order value per product?
+    sql: |
+      SELECT dim_products.product_name AS product,
+             SUM(fct_transactions.revenue) / NULLIF(COUNT(DISTINCT fct_transactions.order_id), 0) AS avg_order_value
+      FROM fct_transactions
+      LEFT JOIN dim_products ON fct_transactions.product_id = dim_products.product_id
+      GROUP BY dim_products.product_name
+      ORDER BY avg_order_value DESC
+      LIMIT 500
+
+  - question: Which products have the best ROAS?
+    sql: |
+      SELECT dim_products.product_name AS product,
+             SUM(fct_transactions.revenue) / NULLIF(SUM(fct_promotions.promo_cost), 0) AS roas
+      FROM fct_transactions
+      LEFT JOIN dim_products ON fct_transactions.product_id = dim_products.product_id
+      LEFT JOIN fct_promotions ON dim_products.product_id = fct_promotions.product_id
+      GROUP BY dim_products.product_name
+      ORDER BY roas DESC NULLS LAST
+      LIMIT 500

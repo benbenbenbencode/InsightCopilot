@@ -1,0 +1,26 @@
+# Modelfile for the fine-tuned retail SQL model.
+#
+#   ollama create retail-sql -f training/Modelfile
+#   ollama run retail-sql
+#
+# `ADAPTER` accepts the PEFT/LoRA adapter directory written by
+# training/train_qlora.py. Ollama converts the safetensors adapter on create.
+# The base must match the model you trained (same architecture + tokenizer).
+
+FROM qwen2.5-coder:7b
+
+ADAPTER ./out/adapter
+
+PARAMETER temperature 0
+PARAMETER top_p 0.9
+PARAMETER num_ctx 8192
+PARAMETER num_predict 600
+PARAMETER stop "<|im_end|>"
+PARAMETER stop "<|endoftext|>"
+
+# Deliberately short: the application supplies the full semantic-layer system
+# prompt at request time. This template only sets the model's default posture.
+SYSTEM """
+You are a PostgreSQL analytics engineer. Reply with one read-only SELECT statement.
+Return SQL only: no prose, no markdown fences, no comments.
+"""
